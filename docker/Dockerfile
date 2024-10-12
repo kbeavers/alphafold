@@ -27,13 +27,24 @@ RUN apt-get update \
         cmake \
         cuda-command-line-tools-$(cut -f1,2 -d- <<< ${CUDA//./-}) \
         git \
-        hmmer \
+        #hmmer \
         kalign \
         tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get autoremove -y \
     && apt-get clean
+
+# Compile Hmmer from source.
+RUN wget http://eddylab.org/software/hmmer/hmmer-3.4.tar.gz \
+    && tar -vxzf hmmer-3.4.tar.gz \
+    && rm hmmer-3.4.tar.gz \
+    && cd hmmer-3.4 \
+    && ./configure \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf hmmer-3.4
 
 # Compile HHsuite from source.
 RUN git clone --branch v3.3.0 https://github.com/soedinglab/hh-suite.git /tmp/hh-suite \
@@ -46,22 +57,25 @@ RUN git clone --branch v3.3.0 https://github.com/soedinglab/hh-suite.git /tmp/hh
     && rm -rf /tmp/hh-suite
 
 # Install Miniconda package manager.
-RUN wget -q -P /tmp \
-  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && bash /tmp/Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda \
-    && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
+ARG TARGETARCH
+ARG ARCH
+RUN if [ "$TARGETARCH" = "arm64" ]; then export ARCH="aarch64"; elif [ "$TARGETARCH" = "amd64" ]; then export ARCH="x86_64"; else export ARCH=$TARGETARCH; fi \
+    && wget -q -P /tmp https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${ARCH}.sh \
+    && bash /tmp/Miniconda3-latest-Linux-${ARCH}.sh -b -p /opt/conda \
+    && rm /tmp/Miniconda3-latest-Linux-${ARCH}.sh
 
 # Install conda packages.
 ENV PATH="/opt/conda/bin:$PATH"
 ENV LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH"
-RUN conda install -qy conda==24.1.2 pip python=3.11 \
-    && conda install -y -c nvidia cuda=${CUDA_VERSION} \
-    && conda install -y -c conda-forge openmm=8.0.0 pdbfixer \
+RUN conda install -qy conda==24.5.0 pip python=3.11 \
+    && conda install -y -c nvidia/label/cuda-${CUDA} cuda \
+    && conda install -y -c conda-forge openmm=8.0.0 pdbfixer ncurses \
     && conda clean --all --force-pkgs-dirs --yes
 
 COPY . /app/alphafold
 RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
+RUN chmod -R ugo+rX /app/alphafold
 
 # Install pip packages.
 RUN pip3 install --upgrade pip --no-cache-dir \
@@ -75,7 +89,8 @@ RUN pip3 install --upgrade pip --no-cache-dir \
 RUN chmod u+s /sbin/ldconfig.real
 
 # Currently needed to avoid undefined_symbol error.
-RUN ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7
+RUN if [ "$TARGETARCH" = "arm64" ]; then export ARCH="aarch64"; elif [ "$TARGETARCH" = "amd64" ]; then export ARCH="x86_64"; else export ARCH=$TARGETARCH; fi \
+    && ln -sf /usr/lib/${ARCH}-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7
 
 # We need to run `ldconfig` first to ensure GPUs are visible, due to some quirk
 # with Debian. See https://github.com/NVIDIA/nvidia-docker/issues/1399 for

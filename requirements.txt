@@ -10,4 +10,4 @@ ml-collections==0.1.0
 numpy==1.24.3
 pandas==2.0.3
 scipy==1.11.1
-tensorflow-cpu==2.16.1
+tensorflow==2.16.1
