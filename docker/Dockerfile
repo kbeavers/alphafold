@@ -40,7 +40,7 @@ RUN wget http://eddylab.org/software/hmmer/hmmer-3.4.tar.gz \
     && tar -vxzf hmmer-3.4.tar.gz \
     && rm hmmer-3.4.tar.gz \
     && cd hmmer-3.4 \
-    && ./configure \
+    && ./configure --prefix=/usr \
     && make \
     && make install \
     && cd .. \
